@@ -18,7 +18,7 @@ RUN set -x && \
   git config --global user.email "qinglong@@users.noreply.github.com" && \
   git config --global user.name "qinglong" && \
   git config --global http.postBuffer 524288000 && \
-  git clone --depth=1 -b ${QL_BRANCH} ${QL_URL} ${QL_DIR}
+  git clone --depth=1 -b ${QL_BRANCH} ${QL_URL} ${QL_DIR} 
 
 RUN mkdir /tmp/build
 RUN cp ${QL_DIR}/package.json ${QL_DIR}/.npmrc ${QL_DIR}/pnpm-lock.yaml /tmp/build/
@@ -26,10 +26,6 @@ RUN cp ${QL_DIR}/package.json ${QL_DIR}/.npmrc ${QL_DIR}/pnpm-lock.yaml /tmp/bui
 RUN npm i -g pnpm@8.3.1 && \
   cd /tmp/build && \
   pnpm install --prod
-
-# ============================================================
-# ======================= 运行镜像 ============================
-# ============================================================
 
 FROM python:3.11-slim-bullseye
 
@@ -55,8 +51,7 @@ RUN set -x && \
   ln -s /usr/local/lib/node_modules/npm/bin/npx-cli.js /usr/local/bin/npx && \
   apt-get update && \
   apt-get upgrade -y && \
-  apt-get install --no-install-recommends -y \
-  git \
+  apt-get install --no-install-recommends -y git \
   curl \
   sudo \
   build-essential \
@@ -64,6 +59,7 @@ RUN set -x && \
   default-jre \
   g++ \
   gcc \
+  libzbar0 \
   fish \
   ffmpeg \
   nmap \
@@ -80,29 +76,19 @@ RUN set -x && \
   procps \
   netcat \
   sshpass \
-  rclone \
-  unzip \
-  libatomic1 \
-  \
-  # ===== Python3 脚本实战补齐（系统级）=====
   python3-pip \
   python3-venv \
   python3-dev \
-  libssl-dev \
-  libffi-dev \
-  zlib1g-dev \
-  libbz2-dev \
-  libreadline-dev \
-  libsqlite3-dev \
-  liblzma-dev \
-  \
+  rclone \
+  unzip \
+  libatomic1 && \
   apt-get clean && \
   ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
   echo "Asia/Shanghai" >/etc/timezone && \
   git config --global user.email "qinglong@@users.noreply.github.com" && \
   git config --global user.name "qinglong" && \
   git config --global http.postBuffer 524288000 && \
-  npm install -g pnpm@8.3.1 pm2 ts-node axios got && \
+  npm install -g pnpm@8.3.1 pm2 ts-node && \
   rm -rf /root/.pnpm-store && \
   rm -rf /root/.local/share/pnpm/store && \
   rm -rf /root/.cache && \
@@ -110,38 +96,13 @@ RUN set -x && \
   chmod u+s /usr/sbin/cron && \
   ulimit -c 0
 
-# ================= Python 脚本实战 pip 依赖 =================
-RUN pip3 install --no-cache-dir \
-  requests \
-  aiohttp \
-  websockets \
-  PyYAML \
-  python-dateutil \
-  pytz \
-  tzlocal \
-  certifi \
-  idna \
-  chardet \
-  charset-normalizer \
-  urllib3 \
-  cryptography \
-  pycryptodome \
-  rsa \
-  Pillow \
-  lxml \
-  beautifulsoup4 \
-  bs4 \
-  numpy \
-  pandas \
-  pyzbar \
-  qrcode \
-  opencv-python-headless
 
 # Install code-server
 RUN curl -fsSL https://code-server.dev/install.sh | sh -s -- --version=4.96.4
 
 # Install ollama
 RUN curl -fsSL https://ollama.com/install.sh | sh
+
 
 ARG SOURCE_COMMIT
 RUN git clone --depth=1 -b ${QL_BRANCH} ${QL_URL} ${QL_DIR} && \
@@ -158,31 +119,58 @@ RUN git clone --depth=1 -b ${QL_BRANCH} ${QL_URL} ${QL_DIR} && \
 COPY docker-entrypoint.sh ${QL_DIR}/docker
 COPY front.conf ${QL_DIR}/docker/front.conf
 
-RUN mkdir -p /ql/data/{config,log,db,scripts,repo,raw,deps} && \
-  chmod -R 777 /ql /var /usr/local /etc/nginx /run /usr /root
+RUN mkdir /ql/data && \
+  mkdir /ql/data/config && \
+  mkdir /ql/data/log && \
+  mkdir /ql/data/db && \
+  mkdir /ql/data/scripts && \
+  mkdir /ql/data/repo && \
+  mkdir /ql/data/raw && \
+  mkdir /ql/data/deps && \
+  chmod -R 777 /ql && \
+  chmod -R 777 /var && \
+  chmod -R 777 /usr/local && \
+  chmod -R 777 /etc/nginx && \
+  chmod -R 777 /run && \
+  chmod -R 777 /usr && \
+  chmod -R 777 /root 
 
 COPY --from=builder /tmp/build/node_modules/. /ql/node_modules/
 COPY services.json /ql/node_modules/nodemailer/lib/well-known/
 COPY notify.py /notify.py
 
-# Create code-server user
+
+
+# Create a user to run code-server
 RUN useradd -m -s /bin/zsh coder && \
-  echo 'coder ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers && \
-  mkdir -p /home/coder/.local/share/code-server/User && \
-  chmod -R 777 /home/coder && \
-  echo '{ \
-    "workbench.colorTheme": "Default Dark Modern", \
+    echo 'coder ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
+
+# Create code-server configuration directory
+RUN mkdir -p /home/coder/.local/share/code-server/User
+RUN chmod -R 777 /home/coder
+
+# Add settings.json to enable dark mode
+RUN echo '{ \
+   "workbench.colorTheme": "Default Dark Modern", \
     "telemetry.enableTelemetry": true, \
     "telemetry.enableCrashReporter": true \
-  }' > /home/coder/.local/share/code-server/User/settings.json && \
-  chown -R coder:coder /home/coder/.local/share/code-server
+}' > /home/coder/.local/share/code-server/User/settings.json
 
+# Change ownership of the configuration directory
+RUN chown -R coder:coder /home/coder/.local/share/code-server
+
+# Install Python extension for code-server
+#RUN sudo -u coder code-server --install-extension ms-python.python
+
+# Switch to the coder user for running code-server
 USER coder
+
 ENV HOME=/home/coder \
-  PATH=/home/coder/.local/bin:$PATH
+	PATH=/home/coder/.local/bin:$PATH
 
 WORKDIR ${QL_DIR}
 
+# 创建rclone配置文件
 RUN rclone config -h
 
 HEALTHCHECK --interval=5s --timeout=2s --retries=20 \
@@ -191,4 +179,5 @@ HEALTHCHECK --interval=5s --timeout=2s --retries=20 \
 ENTRYPOINT ["./docker/docker-entrypoint.sh"]
 
 VOLUME /ql/data
+  
 EXPOSE 5700
