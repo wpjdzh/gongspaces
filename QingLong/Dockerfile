@@ -96,23 +96,6 @@ RUN set -x && \
   libsqlite3-dev \
   liblzma-dev \
   \
-  # ===== Python 扩展 / 图像 / OCR / 二维码 =====
-  libxml2-dev \
-  libxslt1-dev \
-  libjpeg-dev \
-  libpng-dev \
-  libfreetype6-dev \
-  libzbar-dev \
-  tesseract-ocr \
-  tesseract-ocr-eng \
-  tesseract-ocr-chi-sim \
-  \
-  # ===== 网络 / curl 依赖 =====
-  libcurl4-openssl-dev \
-  iputils-ping \
-  dnsutils \
-  coreutils && \
-  \
   apt-get clean && \
   ln -sf /usr/share/zoneinfo/Asia/Shanghai /etc/localtime && \
   echo "Asia/Shanghai" >/etc/timezone && \
